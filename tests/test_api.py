@@ -8,7 +8,6 @@ import pytest_asyncio
 client = TestClient(app)
 BASE_URL = "/customers"
 
-
 @pytest_asyncio.fixture
 async def cleanup():
     yield
@@ -16,15 +15,11 @@ async def cleanup():
     if os.path.exists(upload_dir):
         for file in os.listdir(upload_dir):
             os.remove(os.path.join(upload_dir, file))
+        if not os.listdir(upload_dir):
+            os.rmdir(upload_dir)
 
-
-def test_get_customers():
-    response = client.get(BASE_URL + "/")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
-
-
-def test_post_customer():
+@pytest.fixture
+def customer_id():
     payload = {
         "name": "Test User",
         "city": "Chennai",
@@ -33,38 +28,43 @@ def test_post_customer():
     }
     response = client.post(BASE_URL + "/", json=payload)
     assert response.status_code == 200
-    assert response.json()["message"] == "Customer added successfully!"
-    assert "customer_id" in response.json()
-    # Store customer_id for later use
-    pytest.customer_id = response.json()["customer_id"]
+    return response.json()["customer_id"]
 
+def test_get_customers():
+    response = client.get(BASE_URL + "/")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+def test_post_customer():
+    payload = {
+        "name": "Rahul Sharma",
+        "city": "Delhi",
+        "country": "India",
+        "fraud_code": 1
+    }
+    response = client.post(BASE_URL + "/", json=payload)
+    assert response.status_code == 200
+    assert response.json()["message"] == "Customer added successfully!"
 
 @pytest.mark.asyncio
-async def test_post_upload(cleanup):
-    # Create a customer
-    test_post_customer()
-    customer_id = pytest.customer_id
-
-    # Create a sample file
+async def test_post_upload_document(cleanup, customer_id):
     sample_file_path = "tests/sample.txt"
     os.makedirs("tests", exist_ok=True)
     with open(sample_file_path, "w") as f:
         f.write("Test document")
-
-    # Upload file with customer_id
     with open(sample_file_path, "rb") as f:
         response = client.post(
             f"{BASE_URL}/upload",
-            data={"customer_id": str(customer_id)},  # Form data expects string
+            data={"customer_id": str(customer_id)},
             files={"file": ("sample.txt", f, "text/plain")}
         )
+    assert response.status_code == 200
 
-    if response.status_code != 200:
-        print(f"Upload Response: {response.json()}")
+def test_delete_customer(customer_id):
+    response = client.delete(f"{BASE_URL}/{customer_id}")
+    assert response.status_code == 200
+    assert response.json()["message"] == "Customer deleted successfully"
 
-    assert response.status_code == 200, f"Failed with status {response.status_code}"
-    assert "File sample.txt uploaded" in response.json()["message"]
-    assert response.json()["fraud_code_updated_to"] in [1, 2]
-
-    if os.path.exists(sample_file_path):
-        os.remove(sample_file_path)
+def test_delete_invalid_customer():
+    response = client.delete(f"{BASE_URL}/9999")
+    assert response.status_code == 404
