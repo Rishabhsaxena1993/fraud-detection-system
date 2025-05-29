@@ -1,9 +1,9 @@
 from fastapi import FastAPI
-from app.routes import router
+from app.routes import customer
 
-app = FastAPI(title="Fraud Detection API")
+app = FastAPI()
 
-app.include_router(router)
+app.include_router(customer.router)
 
 @app.get("/")
 def home():

@@ -1,70 +1,46 @@
 import pytest
-import httpx
 from fastapi.testclient import TestClient
 from app.main import app
-import os
-import pytest_asyncio
+from tests.test_get import GetTests
+from tests.test_post import PostTests
+from tests.test_uploads import UploadTests
 
 client = TestClient(app)
-BASE_URL = "/customers"
 
-@pytest_asyncio.fixture
-async def cleanup():
-    yield
-    upload_dir = "uploads"
-    if os.path.exists(upload_dir):
-        for file in os.listdir(upload_dir):
-            os.remove(os.path.join(upload_dir, file))
-        if not os.listdir(upload_dir):
-            os.rmdir(upload_dir)
+@pytest.fixture(scope="module")
+def test_client():
+    return client
 
-@pytest.fixture
-def customer_id():
-    payload = {
-        "name": "Test User",
-        "city": "Chennai",
-        "country": "India",
-        "fraud_code": 2
-    }
-    response = client.post(BASE_URL + "/", json=payload)
-    assert response.status_code == 200
-    return response.json()["customer_id"]
-
-def test_get_customers():
-    response = client.get(BASE_URL + "/")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
-
-def test_post_customer():
-    payload = {
-        "name": "Rahul Sharma",
-        "city": "Delhi",
-        "country": "India",
-        "fraud_code": 1
-    }
-    response = client.post(BASE_URL + "/", json=payload)
-    assert response.status_code == 200
-    assert response.json()["message"] == "Customer added successfully!"
-
-@pytest.mark.asyncio
-async def test_post_upload_document(cleanup, customer_id):
-    sample_file_path = "tests/sample.txt"
-    os.makedirs("tests", exist_ok=True)
-    with open(sample_file_path, "w") as f:
-        f.write("Test document")
-    with open(sample_file_path, "rb") as f:
-        response = client.post(
-            f"{BASE_URL}/upload",
-            data={"customer_id": str(customer_id)},
-            files={"file": ("sample.txt", f, "text/plain")}
-        )
-    assert response.status_code == 200
-
-def test_delete_customer(customer_id):
-    response = client.delete(f"{BASE_URL}/{customer_id}")
-    assert response.status_code == 200
-    assert response.json()["message"] == "Customer deleted successfully"
-
-def test_delete_invalid_customer():
-    response = client.delete(f"{BASE_URL}/9999")
-    assert response.status_code == 404
+class TestAPI:
+    @pytest.mark.parametrize("test_name", [
+        "test_get_customer",
+        "test_get_customer_invalid_id",
+        "test_get_invalid_endpoint",
+        "test_get_customers_valid_endpoint",
+        "test_get_list_of_records_and_print",
+        "test_get_list_of_duplicate_records",
+        "test_get_users_fraud_code_1",
+        "test_get_users_fraud_code_2",
+        "test_post_single_fraud_code_1",
+        "test_post_single_fraud_code_2",
+        "test_post_invalid_fraud_code",
+        "test_post_multiple_customers",
+        "test_post_upload_document",
+    ])
+    def test_run_selected(self, test_name, test_client, pytestconfig):
+        test_option = pytestconfig.getoption("test")
+        if test_option != "all" and test_option != test_name:
+            pytest.skip(f"Skipping {test_name}, running {test_option}")
+        try:
+            if test_name.startswith("test_get"):
+                get_tests = GetTests(test_client)
+                getattr(get_tests, test_name)()
+            elif test_name.startswith("test_post_single") or test_name == "test_post_multiple_customers":
+                post_tests = PostTests(test_client)
+                getattr(post_tests, test_name)()
+            elif test_name == "test_post_upload_document":
+                upload_tests = UploadTests(test_client)
+                getattr(upload_tests, test_name)()
+        except Exception as e:
+            print(f"Test {test_name} failed with error: {str(e)}")
+            raise

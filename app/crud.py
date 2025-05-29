@@ -1,8 +1,6 @@
 from fastapi import HTTPException
-
 from app.db.connection import get_connection
-from app.schemas import CustomerCreate
-
+from app.models.customer import CustomerCreate
 
 def create_customer(customer: CustomerCreate):
     conn = None

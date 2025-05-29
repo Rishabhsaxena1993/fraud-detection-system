@@ -25,6 +25,28 @@ def get_customers():
         if conn:
             conn.close()
 
+@router.get("/{customer_id}")
+def get_customer(customer_id: int):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM customers WHERE id = %s", (customer_id,))
+        customer = cursor.fetchone()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return customer
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 @router.post("/")
 def add_customer(customer: CustomerCreate):
     conn = None
@@ -37,8 +59,12 @@ def add_customer(customer: CustomerCreate):
         conn.commit()
         customer_id = cursor.lastrowid
         return {"message": "Customer added successfully!", "customer_id": customer_id}
+    except mysql.connector.Error as db_err:
+        print(f"Database error: {db_err}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(db_err)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
     finally:
         if cursor:
             cursor.close()
@@ -77,21 +103,22 @@ def upload_file(customer_id: str = Form(...), file: UploadFile = File(...)):
         if conn:
             conn.close()
 
-@router.delete("/{customer_id}")
-def delete_customer(customer_id: int):
+@router.delete("/{id}")
+def delete_customer(id: int):
     conn = None
     cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM customers WHERE id = %s", (customer_id,))
-        if not cursor.fetchone():
+        cursor.execute("SELECT * FROM customers WHERE id = %s", (id,))
+        customer = cursor.fetchone()
+        if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
-        cursor.execute("DELETE FROM customers WHERE id = %s", (customer_id,))
+        cursor.execute("DELETE FROM customers WHERE id = %s", (id,))
         conn.commit()
         return {"message": "Customer deleted successfully"}
     except HTTPException as e:
-        raise e  # Re-raise 404
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete error: {str(e)}")
     finally:

@@ -1,14 +1,14 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, field_validator
 
 class CustomerCreate(BaseModel):
     name: str
-    city: Optional[str] = None
-    country: Optional[str] = None
+    city: str
+    country: str
     fraud_code: int
 
-class CustomerOut(CustomerCreate):
-    id: int
-
-    class Config:
-        from_attributes = True  # Changed from orm_mode
+    @field_validator('fraud_code')
+    @classmethod
+    def validate_fraud_code(cls, v):
+        if v not in [1, 2]:
+            raise ValueError('fraud_code must be 1 or 2')
+        return v
